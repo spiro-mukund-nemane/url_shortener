@@ -1,0 +1,60 @@
+# Project name is fixed here so containers/volumes/network are named url_shortener_*
+# regardless of the folder name (Compose otherwise uses the directory name).
+name: url_shortener
+
+# Everything:        docker compose up --build        (add -d for background)
+# Only infra (dev):  docker compose up -d postgres redis   → then `cargo run` on host
+# Stop:              docker compose down               (add -v to also wipe DB data)
+services:
+  api:
+    build: .
+    image: url_shortener:latest
+    container_name: url_shortener_api
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      BASE_URL: "http://localhost:3000"
+      # Inside the compose network, services reach each other by service name
+      # (`postgres`, `redis`), NOT localhost — like hostnames on a private LAN.
+      DATABASE_URL: "postgres://shortener:shortener@postgres:5432/shortener"
+      REDIS_URL: "redis://redis:6379"
+    depends_on:
+      postgres:
+        condition: service_healthy   # wait until Postgres accepts connections
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: url_shortener_db
+    environment:
+      POSTGRES_USER: shortener
+      POSTGRES_PASSWORD: shortener   # local dev only
+      POSTGRES_DB: shortener
+    ports:
+      - "5432:5432"                  # exposed so `cargo run` / psql on host can connect
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # data survives `docker compose down`
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shortener -d shortener"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    container_name: url_shortener_cache
+    # Act as a pure LRU cache: cap memory, evict least-recently-used keys when full.
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  pgdata:

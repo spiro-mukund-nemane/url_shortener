@@ -1,0 +1,5 @@
+/target
+.env
+
+# Network-specific proxy CA certs (see certs/README.md)
+certs/*.crt

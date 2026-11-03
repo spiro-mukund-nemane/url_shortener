@@ -1,0 +1,9 @@
+# ≈ ignoring node_modules — target/ can be several GB and must not be sent to Docker
+target/
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+compose.yaml
+*.md
+.env
